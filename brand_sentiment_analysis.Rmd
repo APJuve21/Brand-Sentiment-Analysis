@@ -1,0 +1,180 @@
+---
+title: "eg1"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#Brand sentiment analysis
+
+```{r cars}
+#install.packages("psych")
+#install.packages("GPArotation")
+library(psych)
+library(GPArotation)
+library(reshape)
+library(ggplot2)
+
+setwd <- ("/Users/zijingohmeywu/Downloads/chap3r/")
+df <- load("brand.RData")
+#R file is called brand.ratings
+brand.ratings
+```
+
+
+```{r cars}
+#cor() correlation matrix
+cor(x=brand.ratings[,1:9])
+```
+
+
+```{r cars}
+#principal() principal component factor analysis
+#r= correlation matrix or raw data
+#nfactors= number of factors
+#rotate="none" no rotation
+#covar=T to use covariance matrix
+fit<-principal(r=brand.ratings[,1:9], nfactors=9,rotate="none")
+fit
+#print(fit, digits=3, cutoff=.3, sort=TRUE)
+#no need to rotate now
+
+#SS Loadings show the variance explained by each factor
+#Proportion Var show cumulative percentange of variance explained
+
+#Check SS Loadings for latent root criteria (Eigenvalues for the 3rd factor > 1 while that of 4th factors are <1, 3 factors are suggested ) (Note: SS Loadings are eigenvalues as wel)
+
+```
+
+
+```{r cars}
+#Visualization of scree plot criteria (bit different from latent root criteria)
+#scree() scree plot
+#rx= correlation matrix or raw data
+#factor=FALSE do not draw scree for factors
+scree(rx=brand.ratings[,1:9],factor=FALSE)
+
+#3 factors
+fit <- principal(r=brand.ratings[,1:9], nfactors=3,rotate="none")
+fit
+
+#look at the elbow. elbow indicates good number of factor for cluster analysis (similarly with latent root criteria)
+#BUT for factor analysis, one step above elbow is ideal number of factors (ex. 2 factor model)
+
+#Latent factor criteria follows the  >1, <1 rule
+#Elbow scree plot looks at biggest jump in eigenvalue.
+#In practice, you need to see which one is better to use
+```
+
+
+```{r cars}
+fit$loadings
+fit$communality
+fit$uniquenesses
+```
+
+
+```{r cars}
+#In practice, this is the go-to. No need to do initial loading
+#rotate="varimax" varimax rotation
+#method="regression" factor scores estimated by regression method
+fitr <- principal(r=brand.ratings[,1:9],nfactors=3,rotate="varimax",method="regression")
+fitr
+
+#perform: 0.72 F1* + 0.10 F2* -0.09 F3* + error
+```
+
+
+```{r cars}
+#rotation matrix (permutated)
+fitr$rot.mat[c(1,2,3),c(2,1,3)]
+
+fit$loadings %*% fitr$rot.mat[c(1,2,3),c(2,1,3)]
+fitr$loadings
+
+#RC1 shows high perform, leader, serious is not fun
+#since leader is strongest, we call this leader factor (largest effect)
+
+#RC2 shows high bargain, value, rebuy
+#since leader is strongest, we call this bargain factor
+
+#RC3 shows high latest, trendy
+#since latest is strongest, we call this latest factor
+
+#These three dominating factors: leader, bargain, latest shape customer sentiment towards the brand
+```
+
+
+```{r cars}
+#PER CUSTOMER ANALYSIS
+
+#Employing the regression method f head i = l head i (S^-1) (xi - x mean)
+#Factor score coefficients (weightsT) are L^T S^-1
+#When correlation matrix is used, i.e. standardized values are used, S = R, xi - x mean = zi
+
+#standardized values of x1-x9
+head(scale(brand.ratings[,1:9]))
+#coefficients to calcualte the factor scores
+fitr$weights
+#factor scores
+head(fitr$scores)
+```
+
+
+```{r cars}
+scores<-cbind(brand.ratings["brand"],fitr$scores)
+
+#group means of factor scores
+tb<-aggregate(.~brand,data=scores,FUN=mean)
+tb
+
+#plot of the group means
+tbm<-melt(tb,id.vars='brand')
+ggplot(tbm, 
+       aes(x = variable, y = value, group = brand, colour = brand)) + 
+  geom_line(aes(linetype=brand))+
+  geom_point(aes(shape=brand)) +
+  geom_hline(yintercept=0) +
+  labs(x=NULL,y="mean") +
+  scale_shape_manual(values=1:nlevels(tbm$brand)) +
+  scale_color_manual(values=c(1,2,2,3,4,5,5,3,3,1))
+
+
+#2-factor solution
+fit <- principal(r=brand.ratings[1:9], nfactors=2,rotate="varimax")
+
+#plot of factor loadings
+ld<-data.frame(fit$loadings[,1:2])
+ggplot(data=ld,aes(x=RC1,y=RC2))+
+  geom_point()+
+  geom_text(aes(label=rownames(ld),vjust=1))+
+  geom_vline(aes(xintercept=0))+
+  geom_hline(aes(yintercept=0))+
+  coord_cartesian(xlim = c(-1,1),ylim=c(-1,1)) 
+
+
+#means factor scores
+sc<-data.frame(fit$scores,brand=brand.ratings$brand)
+tb<-aggregate(.~brand,data=sc,FUN=mean)
+#plot
+ggplot(data=tb,aes(x=RC1,y=RC2))+
+  geom_point()+
+  geom_text(aes(label=brand,vjust=1))+
+  geom_vline(aes(xintercept=0))+
+  geom_hline(aes(yintercept=0))
+
+
+#5-cluster solution by Ward's method
+dist<-dist(sc[1:2],method="euclidean")^2
+fitc <- hclust(dist, method="ward.D")
+sol <- cutree(fitc, k=5)
+sol<-data.frame(sol,sc)
+sol$sol<-factor(sol$sol)
+ggplot(data=sol,aes(x=RC1,y=RC2,colour=sol))+
+  geom_point(aes(shape=sol))+
+  geom_vline(aes(xintercept=0))+
+  geom_hline(aes(yintercept=0))
+
+```
